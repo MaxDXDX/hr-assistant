@@ -1,4 +1,3 @@
-# import datetime as dt
 from django.utils import timezone
 import pytz
 
@@ -79,7 +78,7 @@ class DBCreateTestCase(TestCase):
 
         # creating 1/2 candidate with two resumes
         candidate_1 = Candidate.objects.create(
-            name='Иванов Иван',
+            name='Кандидат Первый',
             age=35,
             position='Frontend разработчик',
             citizenship=Citizenship.objects.get(name='Россия'),
@@ -151,13 +150,13 @@ class DBCreateTestCase(TestCase):
 
         # creating 2/2 candidate with 2 resumes
         candidate_2 = Candidate.objects.create(
-            name='Петр Петров',
+            name='Кандидат Второй',
             age=35,
             position='Fullstack разработчик',
             citizenship=Citizenship.objects.get(name='Беларусь'),
             salary='от 50000 руб.'
         )
-        candidate_2.save()
+        # candidate_2.save()
         Contact.objects.bulk_create(
             [
                 Contact(
@@ -233,9 +232,9 @@ class DBCreateTestCase(TestCase):
         vacancy = Vacancy.objects.all()
         self.assertEqual(len(vacancy), 2)
 
-    def test_contact(self):
-        """Get one contact"""
-        candidate = Candidate.objects.get(name='Иванов Иван')
+    def test_get_contact(self):
+        """Get candidate contacts"""
+        candidate = Candidate.objects.get(name='Кандидат Первый')
         contact_list = Contact.objects.filter(candidate=candidate)
 
         contacts = [(contact.contact_type.name, contact.value) for contact in contact_list]
@@ -250,5 +249,234 @@ class DBCreateTestCase(TestCase):
 
         self.assertEqual(contacts, candidate_1_contacts)
 
+    def test_add_new_contact_with_new_type(self):
+        """Add new contact of new type"""
+        candidate_name = 'Кандидат Второй'
+        candidate = Candidate.objects.get(name=candidate_name)
+        previous_contacts = [
+            (contact.contact_type.name, contact.value) for contact in Contact.objects.filter(candidate=candidate)
+        ]
+
+        new_contact = {
+            'type': 'testogram',
+            'value': '@testogram-account'
+        }
+
+        contact_type, created = ContactType.objects.get_or_create(name=new_contact['type'])
+
+        Contact.objects.create(
+            candidate=candidate,
+            contact_type=contact_type,
+            value=new_contact['value']
+        )
+
+        assert_contacts = [
+            ('Phone', '+72222222222'),
+            ('E-mail', '2222@mail.22'),
+            ('Telegram', '@2222'),
+            (new_contact['type'], new_contact['value'])
+        ]
+
+        updated_contacts = [
+            (contact.contact_type.name, contact.value) for contact in Contact.objects.filter(candidate=candidate)
+        ]
+
+        self.assertEqual(assert_contacts, updated_contacts)
+
+    def test_add_candidate(self, **kwargs):
+        error = False
+        try:
+            add_candidate(
+                name='Новый кандидат',
+                age=67,
+                position='Должность нового кандидата',
+                citizenship='Страна нового кандидата',
+                salary='Ожидаемый оклад нового кандидата',
+                contacts=[
+                    {'type': 'Phone', 'value': '+7123456789'},
+                    {'type': 'E-mail', 'value': 'new_cand@new_cand.ru'},
+                    {'type': 'Новый вид связи', 'value': 'значение нового вида связи'},
+                ]
+            )
+        except ValueError:
+            error = True
+
+        self.assertFalse(error)
+
+    def test_add_vacancy(self, **kwargs):
+        error = False
+        try:
+            add_vacancy(
+                name='Новая вакансия',
+                is_open=True,
+                status=Vacancy.NEW,
+                skills=[
+                    'Навык 1 для новой вакансии',
+                    'Навык 2 для новой вакансии',
+                    'Навык 3 для новой вакансии',
+                ],
+                location='местоположение новой вакансии',
+                department='1С',
+                project='Проект новой вакансии',
+                salary='Оклад новой вакансии',
+            )
+        except ValueError:
+            error = True
+
+        self.assertFalse(error)
+
+    def test_add_resume(self, **kwargs):
+        error = False
+        try:
+            add_resume(
+                candidate_id=Candidate.objects.first().pk,
+                source='Источник нового резюме',
+                link='https:/hh.ru/resume',
+                # update_date=None,
+                position='Желаемая должность',
+                experience=3,
+                skills=[
+                    'Навык 1 в резюме',
+                    'Навык 2 в резюме',
+                    'Навык 3 в резюме',
+                ],
+                salary='Желаемый оклад',
+                detailed_experience="""2020-2022: Компания 1 - Должность 1
+                2018-2020: Компания 2 - Должность 2
+                2016-2018: Компания 3 - Должность 3
+                """,
+                about='Информация о себе',
+                phase=5,
+                vacancy_ids=[Vacancy.objects.all()[0].id, Vacancy.objects.all()[1].id]
+            )
+        except ValueError:
+            error = True
+
+        self.assertFalse(error)
+
+    def test_set_resume_phase(self):
+        """Set resume phase by its ID"""
+        some_resume_id = Resume.objects.first().pk
+        set_resume_phase(some_resume_id, 1000)
+
+        updated_resume = Resume.objects.get(pk=some_resume_id)
+        self.assertEqual(1000, updated_resume.phase)
+
+    def test_update_candidate(self):
+        """Update candidate data"""
+        row_id = Candidate.objects.get(name='Кандидат Первый').id
+        new_data = {
+            'name': 'Обновленное имя',
+            'age': 99,
+            'position': 'Обновленная должность',
+            'citizenship': 'Обновленное гражданство',
+            'salary': 'Обновленный оклад',
+            'contacts': {
+                'Новый вид связи #1': 'Значение для нового вида связи #1',
+                'Новый вид связи #2': 'Значение для нового вида связи #2',
+                'Новый вид связи #3': 'Значение для нового вида связи #3',
+            }
+        }
+
+        data = new_data.copy()
+        data['id'] = row_id
+
+        update_record('candidate', data)
+
+        updated_candidate = Candidate.objects.get(id=row_id)
+        # print('sch: ', updated_candidate.citizenship)
+        # print('sch: ', Citizenship.objects.get(updated_candidate.citizenship).name)
+
+        updated_contacts = {
+            contact.contact_type.name: contact.value
+            for contact in Contact.objects.filter(candidate=row_id)
+        }
+
+        updated_data = {
+            'name': updated_candidate.name,
+            'age': updated_candidate.age,
+            'position': updated_candidate.position,
+            'citizenship': updated_candidate.citizenship.name,
+            'salary': updated_candidate.salary,
+            'contacts': updated_contacts,
+        }
+        self.assertEqual(new_data, updated_data)
+
+    def test_update_resume(self):
+        """Update resume data"""
+        row_id = Resume.objects.first().id
+        new_data = {
+            'source': 'Обновленный источник',
+            'link': 'Обновленная ссылка',
+            # 'update_date': 'Обновленная дата обновления',
+            'position': 'Обновленная желаемая должность',
+            'experience': 99,
+            'skills': [
+                'Обновленный навык #1',
+                'Обновленный навык #2',
+                'Обновленный навык #3',
+            ],
+            'salary': 'Обновленный ожидаемый оклад',
+            'detailed_experience': 'Обновленный детальный опыт работы',
+            'about': 'Обновленное <о себе>',
+            'phase': 1000,
+        }
+
+        data = new_data.copy()
+        data['id'] = row_id
+
+        update_record('resume', data)
+        updated_record = Resume.objects.get(id=row_id)
+
+        updated_data = {
+            'source': updated_record.source.name,
+            'link': updated_record.link,
+            # 'update_date': 'Обновленная дата обновления',
+            'position': updated_record.position,
+            'experience': updated_record.experience,
+            'skills': updated_record.skills,
+            'salary': updated_record.salary,
+            'detailed_experience': updated_record.detailed_experience,
+            'about': updated_record.about,
+            'phase': updated_record.phase,
+        }
+        self.assertEqual(new_data, updated_data)
+
+    def test_update_vacancy(self):
+        """Update vacancy data"""
+        row_id = Vacancy.objects.first().id
+        new_data = {
+            'name': 'Обновленное наименование вакансии',
+            'is_open': False,
+            # 'update_date': 'Обновленная дата обновления',
+            'status': Vacancy.REPLACE,
+            'skills': [
+                'Обновленный навык #1 для вакансии',
+                'Обновленный навык #2 для вакансии',
+                'Обновленный навык #3 для вакансии',
+            ],
+            'location': 'Обновленное местоположении вакансии',
+            'department': 'Обновленный отдел',
+            'project': 'Обновленный проект',
+            'salary': 'Обновленный оклад',
+        }
+
+        data = new_data.copy()
+        data['id'] = row_id
+
+        update_record('vacancy', data)
+        updated_record = Vacancy.objects.get(id=row_id)
+
+        updated_data = {
+            'name': updated_record.name,
+            'is_open': updated_record.is_open,
+            'status': updated_record.status,
+            'skills': updated_record.skills,
+            'location': updated_record.location,
+            'department': updated_record.department.name,
+            'project': updated_record.project,
+            'salary': updated_record.salary,
+        }
+        self.assertEqual(new_data, updated_data)
 
 

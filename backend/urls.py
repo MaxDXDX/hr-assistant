@@ -1,7 +1,9 @@
-from django.urls import path
+from django.urls import include, path
 
-from .views import HomePageView
+from .views import HomePageView, api
+
 
 urlpatterns = [
-    path('', HomePageView.as_view(), name='home')
+    path('', HomePageView.as_view(), name='home'),
+    path('api', api, name='api'),
 ]
